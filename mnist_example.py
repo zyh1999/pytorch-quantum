@@ -17,8 +17,8 @@ class QFCModel(tq.QuantumModule):
             super().__init__()
             self.n_wires = 4
             self.random_layer=[]
-            for i in range(4):
-                tmp = mb.RandomLayer(n_depth=4, wires=list(range(self.n_wires)))
+            for i in range(6):
+                tmp = mb.RandomLayer(n_depth=3, wires=list(range(self.n_wires)))
                 self.random_layer.append(tmp)    
             # gates with trainable parameters
             self.rx0 = tq.RX(has_params=True, trainable=True)
@@ -54,9 +54,9 @@ class QFCModel(tq.QuantumModule):
             self.u30(self.q_device, wires=3)
             self.u30(self.q_device, wires=2)
             # add some more non-parameterized gates (add on-the-fly)
-            #tqf.hadamard(self.q_device, wires=3, static=self.static_mode,parent_graph=self.graph)
-            #tqf.sx(self.q_device, wires=2, static=self.static_mode,parent_graph=self.graph)
-            #tqf.cnot(self.q_device, wires=[3, 0], static=self.static_mode,parent_graph=self.graph)
+            tqf.hadamard(self.q_device, wires=3, static=self.static_mode,parent_graph=self.graph)
+            tqf.sx(self.q_device, wires=2, static=self.static_mode,parent_graph=self.graph)
+            tqf.cnot(self.q_device, wires=[3, 0], static=self.static_mode,parent_graph=self.graph)
 
     def __init__(self):
         super().__init__()
@@ -140,7 +140,7 @@ def main():
         root='./mnist_data',
         train_valid_split_ratio=[0.9, 0.1],
         digits_of_interest=[3, 6],
-        n_test_samples=75,
+        n_test_samples=100,
     )
     dataflow = dict()
 
