@@ -1,3 +1,4 @@
+from torchquantum.operators import Observable
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -8,21 +9,23 @@ import torchquantum.functional as tqf
 
 from examples.core.datasets import MNIST
 from torch.optim.lr_scheduler import CosineAnnealingLR
-
+import mini_block as mb
 
 class QFCModel(tq.QuantumModule):
     class QLayer(tq.QuantumModule):
         def __init__(self):
             super().__init__()
             self.n_wires = 4
-            self.random_layer = tq.RandomLayer(n_ops=50,
-                                               wires=list(range(self.n_wires)))
-
+            self.random_layer=[]
+            for i in range(4):
+                tmp = mb.RandomLayer(n_depth=4, wires=list(range(self.n_wires)))
+                self.random_layer.append(tmp)    
             # gates with trainable parameters
             self.rx0 = tq.RX(has_params=True, trainable=True)
             self.ry0 = tq.RY(has_params=True, trainable=True)
             self.rz0 = tq.RZ(has_params=True, trainable=True)
             self.crx0 = tq.CRX(has_params=True, trainable=True)
+            self.u30 = tq.U3(has_params=True, trainable=True)
 
         @tq.static_support
         def forward(self, q_device: tq.QuantumDevice):
@@ -36,32 +39,33 @@ class QFCModel(tq.QuantumModule):
                     to all the tqf functions, such as tqf.hadamard below
             """
             self.q_device = q_device
-
-            self.random_layer(self.q_device)
+            for i in range(2):    
+                self.random_layer[i](self.q_device)
 
             # some trainable gates (instantiated ahead of time)
+            '''
             self.rx0(self.q_device, wires=0)
             self.ry0(self.q_device, wires=1)
             self.rz0(self.q_device, wires=3)
             self.crx0(self.q_device, wires=[0, 2])
-
+            '''
+            self.u30(self.q_device, wires=0)
+            self.u30(self.q_device, wires=1)
+            self.u30(self.q_device, wires=3)
+            self.u30(self.q_device, wires=2)
             # add some more non-parameterized gates (add on-the-fly)
-            tqf.hadamard(self.q_device, wires=3, static=self.static_mode,
-                         parent_graph=self.graph)
-            tqf.sx(self.q_device, wires=2, static=self.static_mode,
-                   parent_graph=self.graph)
-            tqf.cnot(self.q_device, wires=[3, 0], static=self.static_mode,
-                     parent_graph=self.graph)
+            #tqf.hadamard(self.q_device, wires=3, static=self.static_mode,parent_graph=self.graph)
+            #tqf.sx(self.q_device, wires=2, static=self.static_mode,parent_graph=self.graph)
+            #tqf.cnot(self.q_device, wires=[3, 0], static=self.static_mode,parent_graph=self.graph)
 
     def __init__(self):
         super().__init__()
         self.n_wires = 4
         self.q_device = tq.QuantumDevice(n_wires=self.n_wires)
-        self.encoder = tq.GeneralEncoder(
-            tq.encoder_op_list_name_dict['4x4_ryzxy'])
+        self.encoder = tq.GeneralEncoder(tq.encoder_op_list_name_dict['4x4_ryzxy'])
 
         self.q_layer = self.QLayer()
-        self.measure = tq.MeasureAll(tq.PauliZ)
+        #self.measure = tq.MeasureAll(tq.PauliZ)
 
     def forward(self, x, use_qiskit=False):
         bsz = x.shape[0]
@@ -73,9 +77,10 @@ class QFCModel(tq.QuantumModule):
         else:
             self.encoder(self.q_device, x)
             self.q_layer(self.q_device)
-            x = self.measure(self.q_device)
+            x = tq.expval(q_device=self.q_device, wires=[self.n_wires-2,self.n_wires-1], 
+                         observables=[tq.PauliZ(),tq.PauliZ()])
 
-        x = x.reshape(bsz, 2, 2).sum(-1).squeeze()
+        x = x.reshape(bsz, 2, 1).sum(-1).squeeze()
         x = F.log_softmax(x, dim=1)
 
         return x
@@ -145,7 +150,7 @@ def main():
             dataset[split],
             batch_size=256,
             sampler=sampler,
-            num_workers=8,
+            num_workers=4,
             pin_memory=True)
 
     use_cuda = torch.cuda.is_available()
