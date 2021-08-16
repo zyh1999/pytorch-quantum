@@ -10,16 +10,20 @@ import torchquantum.functional as tqf
 from examples.core.datasets import MNIST
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import mini_block as mb
+from block_count import Block_Count
 
 class QFCModel(tq.QuantumModule):
     class QLayer(tq.QuantumModule):
         def __init__(self):
             super().__init__()
             self.n_wires = 4
+            self.depth=6
+            self.block_que=[]
             self.random_layer=[]
-            for i in range(6):
+            for i in range(self.depth):
                 tmp = mb.RandomLayer(n_depth=3, wires=list(range(self.n_wires)))
                 self.random_layer.append(tmp)    
+                self.block_que.append(tmp.gate_que)
             # gates with trainable parameters
             self.rx0 = tq.RX(has_params=True, trainable=True)
             self.ry0 = tq.RY(has_params=True, trainable=True)
@@ -39,7 +43,7 @@ class QFCModel(tq.QuantumModule):
                     to all the tqf functions, such as tqf.hadamard below
             """
             self.q_device = q_device
-            for i in range(2):    
+            for i in range(self.depth):
                 self.random_layer[i](self.q_device)
 
             # some trainable gates (instantiated ahead of time)
@@ -119,23 +123,24 @@ def valid_test(dataflow, split, model, device, qiskit=False):
     size = target_all.shape[0]
     corrects = masks.sum().item()
     accuracy = corrects / size
+
     loss = F.nll_loss(output_all, target_all).item()
 
     print(f"{split} set accuracy: {accuracy}")
     print(f"{split} set loss: {loss}")
+    return accuracy
 
-
-def main():
+def main() -> object:
     parser = argparse.ArgumentParser()
     parser.add_argument('--static', action='store_true', help='compute with '
                                                               'static mode')
     parser.add_argument('--wires-per-block', type=int, default=2,
                         help='wires per block int static mode')
-    parser.add_argument('--epochs', type=int, default=30,
+    parser.add_argument('--epochs', type=int, default=5,
                         help='number of training epochs')
 
     args = parser.parse_args()
-
+    print(args.epochs)
     dataset = MNIST(
         root='./mnist_data',
         train_valid_split_ratio=[0.9, 0.1],
@@ -174,10 +179,13 @@ def main():
         print(optimizer.param_groups[0]['lr'])
 
         # valid
-        valid_test(dataflow, 'valid', model, device)
+        acc=valid_test(dataflow, 'valid', model, device)
         scheduler.step()
+        if(epoch==args.epochs):
+            return acc, model.q_layer.block_que
 
     # test
+    '''
     valid_test(dataflow, 'test', model, device, qiskit=False)
 
     # run on Qiskit simulator and real Quantum Computers
@@ -203,7 +211,7 @@ def main():
               "save the account token according to the instruction at "
               "'https://github.com/Qiskit/qiskit-ibmq-provider', "
               "then try again.")
-
+    '''
 
 if __name__ == '__main__':
     main()
